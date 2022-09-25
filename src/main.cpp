@@ -10,25 +10,28 @@
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 
+#define COMPRESSOR 25
+#define VALVE 26
+#define TRIGGER 39
+
 // SDA => D2
 // SCK => D1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-
 int16_t rotary_count[3] = {0};
 int8_t current_selection = 0;
 
-
 Button2 encoder_button = Button2(33);
+// Button2 trigger_button = Button2(39);
 
-
-static IRAM_ATTR void enc_cb(void* arg) {
+static IRAM_ATTR void enc_cb(void *arg)
+{
   // ESP32Encoder* enc = (ESP32Encoder*) arg;
   static int old_count = 0;
   // int64_t count = ((ESP32Encoder*)arg)->getCount();
-  rotary_count[current_selection] += old_count - ((ESP32Encoder*)arg)->getCount();
-  old_count = ((ESP32Encoder*)arg)->getCount();
-  
+  rotary_count[current_selection] += old_count - ((ESP32Encoder *)arg)->getCount();
+  old_count = ((ESP32Encoder *)arg)->getCount();
+
   // Serial.printf("enc cb: count: %d\n", enc->getCount());
   // static bool leds = false;
   // digitalWrite(LED_BUILTIN, (int)leds);
@@ -37,12 +40,113 @@ static IRAM_ATTR void enc_cb(void* arg) {
 
 ESP32Encoder encoder(true, enc_cb);
 
-
-void click(Button2& btn) {
-    current_selection = (current_selection + 1) % 3;
+void click(Button2 &btn)
+{
+  current_selection = (current_selection + 1) % 3;
 }
 
-void setup() {
+void compressor_activation(uint16_t pressure)
+{
+  if (pressure < rotary_count[0])
+  {
+    digitalWrite(COMPRESSOR, HIGH);
+  }
+  else
+  {
+    digitalWrite(COMPRESSOR, LOW);
+  }
+}
+
+void fire_mods()
+{
+  if (rotary_count[1] == 0)
+  {
+    // continious
+    if (digitalRead(TRIGGER))
+    {
+      digitalWrite(VALVE, LOW);
+    }
+    else
+    {
+      digitalWrite(VALVE, HIGH);
+    }
+  }
+  else if (rotary_count[1] == 1)
+  {
+
+    // one tick
+    static int last_time = 0;
+    if (digitalRead(TRIGGER))
+    {
+      if (millis() - last_time < 300)
+      {
+        digitalWrite(VALVE, LOW);
+      }
+      else
+      {
+        digitalWrite(VALVE, HIGH);
+      }
+    }
+    else
+    {
+      digitalWrite(VALVE, HIGH);
+      last_time = millis();
+    }
+  }
+  else if (rotary_count[1] == 2)
+  {
+    // tree shots
+    static int last_time = 0;
+    if (digitalRead(TRIGGER))
+    {
+      if (millis() - last_time < 300 ||
+          (millis() - last_time > 400 &&
+           millis() - last_time < 700) ||
+          (millis() - last_time > 800 &&
+           millis() - last_time < 1100)
+
+      )
+      {
+        digitalWrite(VALVE, LOW);
+      }
+      else
+      {
+        digitalWrite(VALVE, HIGH);
+      }
+    }
+    else
+    {
+      digitalWrite(VALVE, HIGH);
+      last_time = millis();
+    }
+  }
+  else
+  {
+    // number = frequency
+
+    static int last_time = 0;
+    if (digitalRead(TRIGGER))
+    {
+      if ((millis() - last_time) % (500 - rotary_count[1]) < (500 - rotary_count[1]) * 0.7)
+
+      {
+        digitalWrite(VALVE, LOW);
+      }
+      else
+      {
+        digitalWrite(VALVE, HIGH);
+      }
+    }
+    else
+    {
+      digitalWrite(VALVE, HIGH);
+      last_time = millis();
+    }
+  }
+}
+
+void setup()
+{
   // put your setup code here, to run once:
   Serial.begin(115200);
 
@@ -52,7 +156,9 @@ void setup() {
 
   encoder_button.setTapHandler(click);
 
-
+  pinMode(COMPRESSOR, OUTPUT);
+  pinMode(VALVE, OUTPUT);
+  pinMode(TRIGGER, INPUT);
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
   {
@@ -72,15 +178,40 @@ void setup() {
   display.display();
 }
 
-void loop() {
-  uint16_t pressure = analogRead(36);
-  Serial.printf("Pressure : %d\r\nEncoder : %d", pressure, rotary_count[current_selection]);
+void display_data(uint16_t pressure)
+{
   display.clearDisplay();
-  display.setCursor(0, 0);     // Start at top-left corner
+  display.setCursor(0, 0); // Start at top-left corner
   display.printf("Pressure : %d\nEncoder 1 : %d\nEncoder 2 : %d\nEncoder 3 : %d\n", pressure, rotary_count[0], rotary_count[1], rotary_count[2]);
   display.display();
-  encoder_button.loop();
+}
 
+void display_hud(uint16_t pressure)
+{
+  display.clearDisplay();
+  display.drawRoundRect(0, 5 + 49, 128, 10, 5, WHITE);
+
+  display.fillRoundRect(4, 8 + 49, 120, 4, 4, WHITE);
+
+  display.fillRoundRect(4, 45, 5, 10, 4, WHITE);
+
+//TODO: draw differents fire mods
+
+  display.display();
+}
+
+void loop()
+{
+  uint16_t pressure = analogRead(36);
+  Serial.printf("Pressure : %d\r\nEncoder : %d", pressure, rotary_count[current_selection]);
+
+  encoder_button.loop();
+  compressor_activation(pressure);
+  if (rotary_count[2] == 0)
+    display_data(pressure);
+  else
+    display_hud(pressure);
+  fire_mods();
   delay(10);
 
   // put your main code here, to run repeatedly:

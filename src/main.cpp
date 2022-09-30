@@ -14,11 +14,14 @@
 #define VALVE 26
 #define TRIGGER 39
 
+#define TRESHOLD_COMPRESSOR 200
+
+bool is_compressor_active = false;
 // SDA => D2
 // SCK => D1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-int16_t rotary_count[3] = {0};
+int16_t rotary_count[3] = {400, 0, 1};
 int8_t current_selection = 0;
 
 Button2 encoder_button = Button2(33);
@@ -29,7 +32,44 @@ static IRAM_ATTR void enc_cb(void *arg)
   // ESP32Encoder* enc = (ESP32Encoder*) arg;
   static int old_count = 0;
   // int64_t count = ((ESP32Encoder*)arg)->getCount();
-  rotary_count[current_selection] += old_count - ((ESP32Encoder *)arg)->getCount();
+
+  switch (current_selection)
+  {
+  case 0:
+  {
+    if ((((ESP32Encoder *)arg)->getCount() - old_count > 0 && rotary_count[current_selection] < 2000) 
+    || (((ESP32Encoder *)arg)->getCount() - old_count < 0 && rotary_count[current_selection] > 350)
+
+    )
+      rotary_count[current_selection] += (((ESP32Encoder *)arg)->getCount() - old_count) * 10;
+  }
+  break;
+
+  case 1:
+  {
+    if ((((ESP32Encoder *)arg)->getCount() - old_count > 0 && rotary_count[current_selection] < 400) || (((ESP32Encoder *)arg)->getCount() - old_count < 0 && rotary_count[current_selection] > 0)
+
+    )
+      rotary_count[current_selection] += ((ESP32Encoder *)arg)->getCount() - old_count;
+  }
+  break;
+
+  case 2:
+  {
+    if ((((ESP32Encoder *)arg)->getCount() - old_count > 0 && rotary_count[current_selection] < 1)
+     || (((ESP32Encoder *)arg)->getCount() - old_count < 0 && rotary_count[current_selection] > 0)
+
+    )
+      rotary_count[current_selection] += ((ESP32Encoder *)arg)->getCount() - old_count;
+  }
+  break;
+
+  default:
+    break;
+  }
+
+  // rotary_count[current_selection] += old_count - ((ESP32Encoder *)arg)->getCount();
+
   old_count = ((ESP32Encoder *)arg)->getCount();
 
   // Serial.printf("enc cb: count: %d\n", enc->getCount());
@@ -47,13 +87,16 @@ void click(Button2 &btn)
 
 void compressor_activation(uint16_t pressure)
 {
+
   if (pressure < rotary_count[0])
   {
-    digitalWrite(COMPRESSOR, HIGH);
-  }
-  else
-  {
     digitalWrite(COMPRESSOR, LOW);
+    is_compressor_active = true;
+  }
+  else if (is_compressor_active && pressure > rotary_count[0]  + TRESHOLD_COMPRESSOR)
+  {
+    digitalWrite(COMPRESSOR, HIGH);
+    is_compressor_active = false;
   }
 }
 
@@ -127,7 +170,7 @@ void fire_mods()
     static int last_time = 0;
     if (digitalRead(TRIGGER))
     {
-      if ((millis() - last_time) % (500 - rotary_count[1]) < (500 - rotary_count[1]) * 0.7)
+      if ((millis() - last_time) % (500 - rotary_count[1]) < (500 - rotary_count[1]) * 0.5)
 
       {
         digitalWrite(VALVE, LOW);
@@ -166,6 +209,8 @@ void setup()
     for (;;)
       ; // Don't proceed, loop forever
   }
+    digitalWrite(COMPRESSOR, HIGH);
+
   display.setTextSize(1);      // Normal 1:1 pixel scale
   display.setTextColor(WHITE); // Draw white text
   display.setCursor(0, 0);     // Start at top-left corner
@@ -191,12 +236,51 @@ void display_hud(uint16_t pressure)
   display.clearDisplay();
   display.drawRoundRect(0, 5 + 49, 128, 10, 5, WHITE);
 
-  display.fillRoundRect(4, 8 + 49, 120, 4, 4, WHITE);
+  display.fillRoundRect(4, 8 + 49, 120 * (pressure - 400) / 1700, 4, 4, WHITE);
 
-  display.fillRoundRect(4, 45, 5, 10, 4, WHITE);
+  // TODO: make blink this bar when focused
+  if (current_selection != 0 || millis() % 1000 < 900)
+    display.fillRoundRect( 4 + 120 * (rotary_count[0] - 400) / 1700, 45, 5, 10, 4, WHITE);
+  // TODO: draw differents fire mods
 
-//TODO: draw differents fire mods
+  // 128 - 30 => 98;
 
+  display.setCursor(50, 0); // Start at top-left corner
+
+  display.print("Mode");
+  display.setCursor(40, 35); // Start at top-left corner
+
+  display.print("Pressure");
+
+  if (current_selection != 1 || millis() % 1000 < 900)
+  {
+
+    if (rotary_count[1] == 0)
+    {
+      display.fillRect(5, 20, 118, 3, WHITE);
+    }
+    else if (rotary_count[1] == 1)
+    {
+      display.fillRect(5, 20, 20, 3, WHITE);
+    }
+    else if (rotary_count[1] == 2)
+    {
+      display.fillRect(5, 20, 20, 3, WHITE);
+      display.fillRect(30, 20, 20, 3, WHITE);
+      display.fillRect(55, 20, 20, 3, WHITE);
+    }
+    else
+    {
+      int16_t step = 500 - rotary_count[1];
+      for (int16_t i = 0; i < 118; i++)
+      {
+        if (i % (step / 15) < (step / 20))
+        {
+          display.fillRect(5 + i, 20, 1, 3, WHITE);
+        }
+      }
+    }
+  }
   display.display();
 }
 

@@ -16,6 +16,29 @@
 
 #define TRESHOLD_COMPRESSOR 200
 
+/*                    
+ *                                _____________________
+ *                               | O   | | |  | | |   O |
+ *                               |EN   |__________|  D23|      
+ *      Pressure Senror ---------|VP   |          |  D22|--------- Display SCL
+ *       Trigger Button ---------|VN   |  ESP-32  |  TX0|
+ *                               |D34  |          |  RX0|      
+ *            Encoder A ---------|D35  |          |  D21|--------- Display SDA
+ *            Encoder B ---------|D32  |__________|  D19|      
+ *          Encoder Btn ---------|D33                D18|      
+ *     Compressor Relay ---------|D25                 D5|      
+ *          Valve Relay ---------|D26                TX2|      
+ *                               |D27                RX2|      
+ *                               |D14                 D4|      
+ *                               |D12                 D2|      
+ *                               |D13                D15|      
+ *                               |GND                GND|      
+ *                               |VIN                3V3|      
+ *                               |     o   ____   o     |
+ *                               |________|____|________|
+ *              
+ */
+
 bool is_compressor_active = false;
 // SDA => D2
 // SCK => D1
@@ -236,11 +259,25 @@ void display_hud(uint16_t pressure)
   display.clearDisplay();
   display.drawRoundRect(0, 5 + 49, 128, 10, 5, WHITE);
 
-  display.fillRoundRect(4, 8 + 49, 120 * (pressure - 400) / 1700, 4, 4, WHITE);
+  // display.fillRoundRect(4, 8 + 49, 120 * (pressure - 400) / 1700, 4, 4, WHITE);
+
+      for (int16_t i = 0; i < 120 * (pressure - 400) / 1700; i++)
+      {
+        if (!is_compressor_active || millis() / 10 %  (120) > i || millis() / 10 %  (120) + 5 < i)
+        {
+          display.fillRect(4 + i, 8 + 49, 1, 4, WHITE);
+        }
+      }
+
 
   // TODO: make blink this bar when focused
   if (current_selection != 0 || millis() % 1000 < 900)
-    display.fillRoundRect( 4 + 120 * (rotary_count[0] - 400) / 1700, 45, 5, 10, 4, WHITE);
+  {
+      display.fillRoundRect( 4 + 120 * (rotary_count[0] - 400) / 1700, 45, 5, 10, 4, WHITE);
+  }
+
+
+
   // TODO: draw differents fire mods
 
   // 128 - 30 => 98;

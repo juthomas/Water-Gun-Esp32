@@ -16,12 +16,12 @@
 
 #define TRESHOLD_COMPRESSOR 200
 
-/*                    
- *                                _____________________
- *                               | O   | | |  | | |   O |
+/*                                                             
+ *                                ______________________       
+ *                               | O   | | |  | | |   O |      
  *                               |EN   |__________|  D23|      
  *      Pressure Senror ---------|VP   |          |  D22|--------- Display SCL
- *       Trigger Button ---------|VN   |  ESP-32  |  TX0|
+ *       Trigger Button ---------|VN   |  ESP-32  |  TX0|      
  *                               |D34  |          |  RX0|      
  *            Encoder A ---------|D35  |          |  D21|--------- Display SDA
  *            Encoder B ---------|D32  |__________|  D19|      
@@ -32,11 +32,18 @@
  *                               |D14                 D4|      
  *                               |D12                 D2|      
  *                               |D13                D15|      
- *                               |GND                GND|      
- *                               |VIN                3V3|      
- *                               |     o   ____   o     |
- *                               |________|____|________|
- *              
+ *               GND in ---------|GND                GND|--------- Power for buttons, pressure, display, relays
+ *                9V in ---------|VIN                3V3|--------- Power for buttons, pressure, display, relays
+ *                               |     o   ____   o     | 
+ *                               |________|____|________| 
+ *               TRIGGER                                  
+ *                 ___                                    
+ * VN Pin ------__|C  |\           _______     _______    
+ *                |   | \         |4s   to|   |4s  to |   
+ *    3V3 ------__|NO |  \        |9V  reg|   |12V reg|   
+ *                |   |   \       |for esp|   |for rel|   
+ *              __|___|    \O     |_______|   |_______|   
+ *                                                        
  */
 
 bool is_compressor_active = false;
@@ -224,7 +231,7 @@ void setup()
 
   pinMode(COMPRESSOR, OUTPUT);
   pinMode(VALVE, OUTPUT);
-  pinMode(TRIGGER, INPUT);
+  pinMode(TRIGGER, INPUT_PULLDOWN);
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
   {
